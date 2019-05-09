@@ -27,7 +27,7 @@ def get_imei() -> int:
     pass
 
 
-def get_service() -> googleapiclient.discovery.Resource:
+def get_service():
     creds = None
     # The file token.pickle stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
@@ -52,6 +52,6 @@ def get_service() -> googleapiclient.discovery.Resource:
     return service
 
 
-if __name__ == "__main__":
-    if get_service() is not None:
-        print(get_service())
+@click.command()
+def main():
+    click.echo("Hello, world.")
