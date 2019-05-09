@@ -105,3 +105,11 @@ venv.bak/
 
 # Credentials
 credentials.json
+token.pickle
+
+# IDE / editor files
+.vscode/
+.idea/
+
+# macOS Finder cache
+.DS_Store
