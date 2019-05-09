@@ -10,21 +10,34 @@ from google.auth.transport.requests import Request
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+SECRETS_URL = "credentials.json"
+SECRETS_ENCRYPTED_URL = "credentials.json.gpg"
+imei = None
 
 
-def secrets_file_exists() -> bool:
-    SECRETS_FILE_URL = "credentials.json"
-    SECRETS_FILE_ENCRYPTED_URL = "credentials.json.gpg"
-    if path.exists(SECRETS_FILE_URL):
+def check_secrets_exists() -> bool:
+    if path.exists(SECRETS_URL):
         return True
-    elif path.exists(SECRETS_FILE_ENCRYPTED_URL):
+    elif path.exists(SECRETS_ENCRYPTED_URL):
+        click.echo("Decrypt "
+                   + click.style(SECRETS_ENCRYPTED_URL, bold=True)
+                   + " to "
+                   + click.style(SECRETS_URL, bold=True))
         return False
     else:
+        click.echo("Obtain the credentials file "
+                   + click.style(SECRETS_ENCRYPTED_URL, bold=True))
         return False
 
 
 def get_imei() -> int:
-    pass
+    if check_secrets_exists():
+        with open(SECRETS_URL) as f:
+            data = json.load(f)
+
+        imei = data["imei"]
+
+        return imei
 
 
 def get_service():
@@ -52,6 +65,14 @@ def get_service():
     return service
 
 
-@click.command()
+@click.group()
 def main():
-    click.echo("Hello, world.")
+    global imei
+    imei = get_imei()
+
+    print(imei)
+
+
+@main.command()
+def send():
+    service = get_service()
