@@ -10,29 +10,30 @@ from google.auth.transport.requests import Request
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
-SECRETS_URL = "credentials.json"
-SECRETS_ENCRYPTED_URL = "credentials.json.gpg"
+SECRETS_FILENAME = "credentials.json"
+SECRETS_FILENAME_ENCRYPTED = "credentials.json.gpg"
 IMEI = None
+MSG_FILENAME_DEFAULT = "msg.sbd"
 
 
 def check_secrets_exists() -> bool:
-    if path.exists(SECRETS_URL):
+    if path.exists(SECRETS_FILENAME):
         return True
-    elif path.exists(SECRETS_ENCRYPTED_URL):
+    elif path.exists(SECRETS_FILENAME_ENCRYPTED):
         click.echo("Decrypt "
-                   + click.style(SECRETS_ENCRYPTED_URL, bold=True)
+                   + click.style(SECRETS_FILENAME_ENCRYPTED, bold=True)
                    + " to "
-                   + click.style(SECRETS_URL, bold=True))
+                   + click.style(SECRETS_FILENAME, bold=True))
         return False
     else:
         click.echo("Obtain the credentials file "
-                   + click.style(SECRETS_ENCRYPTED_URL, bold=True))
+                   + click.style(SECRETS_FILENAME_ENCRYPTED, bold=True))
         return False
 
 
 def get_imei() -> int:
     if check_secrets_exists():
-        with open(SECRETS_URL) as f:
+        with open(SECRETS_FILENAME) as f:
             data = json.load(f)
 
         imei = data["imei"]
@@ -70,8 +71,6 @@ def main():
     global IMEI
     IMEI = get_imei()
 
-    print(IMEI)
-
 
 @main.command()
 @click.option("-m", "--msg", "use_msg", is_flag=True)
@@ -79,13 +78,34 @@ def main():
 @click.argument("body")
 def send(use_msg, use_file, body):
     service = get_service()
+    click.echo("IMEI: " + str(IMEI))
 
     if use_msg:
-        create_file(body)
+        create_msg_file(body)
+        send_gmail(MSG_FILENAME_DEFAULT)
     elif use_file:
-        pass
+        if os.path.exists(body) and body.endswidth(".sbd"):
+            send_gmail(body)
+        else:
+            click.echo("ERROR: Invalid filename", err=True)
     else:
-        create_file(body)
+        create_msg_file(body)
+        send_gmail(MSG_FILENAME_DEFAULT)
 
-def create_file(msg):
+
+def send_gmail(msg_filename):
     pass
+
+
+def create_msg_file(msg):
+    delete_msg_file()
+    msg_file = open(MSG_FILENAME_DEFAULT, "w+")
+    msg_file.write(msg)
+    msg_file.close()
+
+
+def delete_msg_file():
+    if os.path.exists(MSG_FILENAME_DEFAULT):
+        os.remove(MSG_FILENAME_DEFAULT)
+    else:
+        click.echo("WARN: Default message file not found")
