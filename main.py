@@ -1,19 +1,30 @@
+import base64
 import json
+import mimetypes
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from os import path
 import click
 import pickle
 import os.path
 from googleapiclient.discovery import build
+from googleapiclient import errors
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 
 # If modifying these scopes, delete the file token.pickle.
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 SECRETS_FILENAME = "credentials.json"
 SECRETS_FILENAME_ENCRYPTED = "credentials.json.gpg"
 IMEI = None
+
 MSG_FILENAME_DEFAULT = "msg.sbd"
+
+MAIL_TO_SEND = "data@sbd.iridium.com"
+MAIL_FROM = "tjreverb@gmail.com"
 
 
 def check_secrets_exists() -> bool:
@@ -82,19 +93,59 @@ def send(use_msg, use_file, body):
 
     if use_msg:
         create_msg_file(body)
-        send_gmail(MSG_FILENAME_DEFAULT)
+        send_mail(MSG_FILENAME_DEFAULT, service)
+        delete_msg_file()
     elif use_file:
-        if os.path.exists(body) and body.endswidth(".sbd"):
-            send_gmail(body)
-        else:
+        if not os.path.exists(body):
+            click.echo("ERROR: File not found", err=True)
+            return
+        if not body.endswith(".sbd"):
             click.echo("ERROR: Invalid filename", err=True)
+            return
+        send_mail(body, service)
     else:
         create_msg_file(body)
-        send_gmail(MSG_FILENAME_DEFAULT)
+        send_mail(MSG_FILENAME_DEFAULT, service)
+        delete_msg_file()
 
 
-def send_gmail(msg_filename):
-    pass
+def send_mail(msg_filename, service):
+    message = MIMEMultipart()
+    message["to"] = MAIL_TO_SEND
+    message["from"] = MAIL_FROM
+    message["subject"] = str(IMEI)
+
+    mail_body = MIMEText("")
+    message.attach(mail_body)
+
+    content_type, encoding = mimetypes.guess_type(msg_filename)
+
+    if content_type is None or encoding is not None:
+        content_type = 'application/octet-stream'
+    main_type, sub_type = content_type.split('/', 1)
+
+    file_attachment = open(msg_filename, 'rb')
+    mail_attachment = MIMEBase(main_type, sub_type)
+    mail_attachment.set_payload(file_attachment.read())
+    encoders.encode_base64(mail_attachment)
+    file_attachment.close()
+
+    filename = os.path.basename(msg_filename)
+    mail_attachment.add_header(
+        'Content-Disposition', 'attachment', filename=filename)
+    message.attach(mail_attachment)
+
+    # Create the encoded message
+    message_encoded = {'raw': base64.urlsafe_b64encode(
+        message.as_bytes()).decode()}
+
+    try:
+        message = (service.users().messages().send(userId=MAIL_FROM, body=message_encoded)
+                   .execute())
+        click.echo('SUCCESS: Message sent, ID: %s' % message['id'])
+        return message
+    except errors.HttpError as error:
+        click.echo('ERROR: %s' % error, err=True)
 
 
 def create_msg_file(msg):
