@@ -86,7 +86,7 @@ def main():
     global IMEI, MAIL_RECEIVE_SUBJECT
     IMEI = get_imei()
     MAIL_RECEIVE_SUBJECT += str(IMEI)
-    click.echo("IMEI: " + str(IMEI))
+    click.secho("IMEI: " + str(IMEI) , fg="green")
 
 
 @main.command()
@@ -172,11 +172,17 @@ def delete_msg_file():
 def receive(num_msgs):
     service = get_service()
     query = "from:" + MAIL_RECEIVE + " " \
-            + "subject:" + MAIL_RECEIVE_SUBJECT
+            + "subject:" + MAIL_RECEIVE_SUBJECT + " " \
+            + "has:attachment"
     messages = receive_msg_list(service, MAIL_FROM, num_msgs, query)
 
     for message in messages:
-        receive_msg_attach(service, MAIL_FROM, message["id"], "")
+        msg_body = str(receive_msg_body(service, MAIL_FROM, message["id"]))
+        msg_decoded = receive_msg_attach(service, MAIL_FROM, message["id"], "")
+        if msg_decoded is not None or msg_decoded:
+            click.secho(get_msg_send_date(msg_body), fg="cyan")
+            click.echo(msg_decoded)
+            click.echo()
 
 
 def receive_msg_list(service, user_id, max_results, query=''):
@@ -233,11 +239,9 @@ def receive_msg_body(service, user_id, msg_id):
         message = service.users().messages().get(userId=user_id, id=msg_id,
                                                  format='raw').execute()
 
-        print('Message snippet: %s' % message['snippet'])
-
         msg_str = base64.urlsafe_b64decode(message['raw'].encode('ASCII'))
 
-        mime_msg = message_from_string(str(msg_str))
+        mime_msg = message_from_string(msg_str.decode())
 
         return mime_msg
 
@@ -245,7 +249,7 @@ def receive_msg_body(service, user_id, msg_id):
             click.echo('ERROR: %s' % error, err=True)
 
 
-def receive_msg_attach(service, user_id, msg_id, store_dir):
+def receive_msg_attach(service, user_id, msg_id, store_dir="msg", save=False):
     """Get and store attachment from Message with given id.
 
     Args:
@@ -259,8 +263,6 @@ def receive_msg_attach(service, user_id, msg_id, store_dir):
         message = service.users().messages().get(userId=user_id, id=msg_id).execute()
 
         for part in message['payload']['parts']:
-            print(part)
-
             if part['filename']:
                 if 'data' in part['body']:
                     attach_data = part['body']['data']
@@ -273,13 +275,25 @@ def receive_msg_attach(service, user_id, msg_id, store_dir):
                 file_data = base64.urlsafe_b64decode(attach_data
                                                      .encode('UTF-8'))
 
-                path = ''.join([store_dir, part['filename']])
+                file_decoded_msg = file_data.decode()
 
-                f = open(path, 'w')
-                f.write(file_data.decode())
-                f.close()
+                if save:
+                    file_local_path = ''.join([store_dir, part['filename']])
+
+                    f = open(file_local_path, 'w')
+                    f.write(file_decoded_msg)
+                    f.close()
+
+                return file_decoded_msg
 
     except errors.HttpError as error:
             click.echo('ERROR: %s' % error, err=True)
 
 
+def get_msg_send_date(msg_body) -> str:
+    date = ""
+    for line in msg_body.split("\n"):
+        if "Time of Session" in line:
+            date = line.strip()
+
+    return date
