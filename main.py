@@ -1,6 +1,7 @@
 import base64
 import json
 import mimetypes
+from email import message_from_string
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -16,7 +17,7 @@ from google.auth.transport.requests import Request
 
 
 # If modifying these scopes, delete the file token.pickle.
-SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/gmail.modify']
 SECRETS_FILENAME = "credentials.json"
 SECRETS_FILENAME_ENCRYPTED = "credentials.json.gpg"
 IMEI = None
@@ -25,6 +26,9 @@ MSG_FILENAME_DEFAULT = "msg.sbd"
 
 MAIL_TO_SEND = "data@sbd.iridium.com"
 MAIL_FROM = "tjreverb@gmail.com"
+
+MAIL_RECEIVE = "sbdservice@sbd.iridium.com"
+MAIL_RECEIVE_SUBJECT = "SBD Msg From Unit: "
 
 
 def check_secrets_exists() -> bool:
@@ -79,8 +83,10 @@ def get_service():
 
 @click.group()
 def main():
-    global IMEI
+    global IMEI, MAIL_RECEIVE_SUBJECT
     IMEI = get_imei()
+    MAIL_RECEIVE_SUBJECT += str(IMEI)
+    click.echo("IMEI: " + str(IMEI))
 
 
 @main.command()
@@ -89,7 +95,6 @@ def main():
 @click.argument("body")
 def send(use_msg, use_file, body):
     service = get_service()
-    click.echo("IMEI: " + str(IMEI))
 
     if use_msg:
         create_msg_file(body)
@@ -160,3 +165,121 @@ def delete_msg_file():
         os.remove(MSG_FILENAME_DEFAULT)
     else:
         click.echo("WARN: Default message file not found")
+
+
+@main.command()
+@click.option("-n", "num_msgs", default=1)
+def receive(num_msgs):
+    service = get_service()
+    query = "from:" + MAIL_RECEIVE + " " \
+            + "subject:" + MAIL_RECEIVE_SUBJECT
+    messages = receive_msg_list(service, MAIL_FROM, num_msgs, query)
+
+    for message in messages:
+        receive_msg_attach(service, MAIL_FROM, message["id"], "")
+
+
+def receive_msg_list(service, user_id, max_results, query=''):
+    """List all Messages of the user's mailbox matching the query.
+
+    Args:
+        service: Authorized Gmail API service instance.
+        user_id: User's email address. The special value "me"
+        can be used to indicate the authenticated user.
+        query: String used to filter messages returned.
+        Eg.- 'from:user@some_domain.com' for Messages from a particular sender.
+
+    Returns:
+        List of Messages that match the criteria of the query. Note that the
+        returned list contains Message IDs, you must use get with the
+        appropriate ID to get the details of a Message.
+    """
+
+    try:
+        response = service.users().messages().list(userId=user_id,
+                                                   q=query,
+                                                   maxResults=max_results).execute()
+        messages = []
+
+        if 'messages' in response:
+            messages.extend(response['messages'])
+
+        while 'nextPageToken' in response:
+            page_token = response['nextPageToken']
+            response = service.users().messages().list(userId=user_id, q=query,
+                                                 pageToken=page_token).execute()
+            messages.extend(response['messages'])
+
+        return messages[:max_results]
+
+    except errors.HttpError as error:
+            click.echo('ERROR: %s' % error, err=True)
+
+
+def receive_msg_body(service, user_id, msg_id):
+    """Get a Message and use it to create a MIME Message.
+
+    Args:
+        service: Authorized Gmail API service instance.
+        user_id: User's email address. The special value "me"
+        can be used to indicate the authenticated user.
+        msg_id: The ID of the Message required.
+
+    Returns:
+        A MIME Message, consisting of data from Message.
+    """
+
+    try:
+        message = service.users().messages().get(userId=user_id, id=msg_id,
+                                                 format='raw').execute()
+
+        print('Message snippet: %s' % message['snippet'])
+
+        msg_str = base64.urlsafe_b64decode(message['raw'].encode('ASCII'))
+
+        mime_msg = message_from_string(str(msg_str))
+
+        return mime_msg
+
+    except errors.HttpError as error:
+            click.echo('ERROR: %s' % error, err=True)
+
+
+def receive_msg_attach(service, user_id, msg_id, store_dir):
+    """Get and store attachment from Message with given id.
+
+    Args:
+        service: Authorized Gmail API service instance.
+        user_id: User's email address. The special value "me"
+        can be used to indicate the authenticated user.
+        msg_id: ID of Message containing attachment.
+        store_dir: The directory used to store attachments.
+    """
+    try:
+        message = service.users().messages().get(userId=user_id, id=msg_id).execute()
+
+        for part in message['payload']['parts']:
+            print(part)
+
+            if part['filename']:
+                if 'data' in part['body']:
+                    attach_data = part['body']['data']
+                else:
+                    attach_id = part['body']['attachmentId']
+                    attach = service.users().messages().attachments().get(userId=user_id, messageId=msg_id,
+                                                                       id=attach_id).execute()
+                    attach_data = attach['data']
+
+                file_data = base64.urlsafe_b64decode(attach_data
+                                                     .encode('UTF-8'))
+
+                path = ''.join([store_dir, part['filename']])
+
+                f = open(path, 'w')
+                f.write(file_data.decode())
+                f.close()
+
+    except errors.HttpError as error:
+            click.echo('ERROR: %s' % error, err=True)
+
+
