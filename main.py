@@ -12,7 +12,7 @@ from google.auth.transport.requests import Request
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 SECRETS_URL = "credentials.json"
 SECRETS_ENCRYPTED_URL = "credentials.json.gpg"
-imei = None
+IMEI = None
 
 
 def check_secrets_exists() -> bool:
@@ -67,12 +67,25 @@ def get_service():
 
 @click.group()
 def main():
-    global imei
-    imei = get_imei()
+    global IMEI
+    IMEI = get_imei()
 
-    print(imei)
+    print(IMEI)
 
 
 @main.command()
-def send():
+@click.option("-m", "--msg", "use_msg", is_flag=True)
+@click.option("-f", "--file", "use_file", is_flag=True)
+@click.argument("body")
+def send(use_msg, use_file, body):
     service = get_service()
+
+    if use_msg:
+        create_file(body)
+    elif use_file:
+        pass
+    else:
+        create_file(body)
+
+def create_file(msg):
+    pass
