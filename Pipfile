@@ -12,6 +12,7 @@ google-auth-httplib2 = "*"
 google-auth-oauthlib = "*"
 click = "*"
 iridium-cli = {editable = true,path = "."}
+pytz = "*"
 
 [requires]
 python_version = "3.7"

@@ -1,6 +1,8 @@
 import base64
 import json
 import mimetypes
+import datetime
+from pytz import timezone
 from email import message_from_string
 from email import encoders
 from email.mime.base import MIMEBase
@@ -180,7 +182,7 @@ def receive(num_msgs):
         msg_body = str(receive_msg_body(service, MAIL_FROM, message["id"]))
         msg_decoded = receive_msg_attach(service, MAIL_FROM, message["id"], "")
         if msg_decoded is not None or msg_decoded:
-            click.secho(get_msg_send_date(msg_body), fg="cyan")
+            click.secho(get_msg_send_date(msg_body).strftime("%c"), fg="cyan")
             click.echo(msg_decoded)
             click.echo()
 
@@ -290,10 +292,22 @@ def receive_msg_attach(service, user_id, msg_id, store_dir="msg", save=False):
             click.echo('ERROR: %s' % error, err=True)
 
 
-def get_msg_send_date(msg_body) -> str:
+def get_msg_send_date(msg_body) -> datetime.datetime:
     date = ""
     for line in msg_body.split("\n"):
         if "Time of Session" in line:
             date = line.strip()
 
-    return date
+    date_string = date.replace("Time of Session (UTC): ", "")
+    date_format = '%c'
+
+    try:
+        date_parsed = datetime.datetime.strptime(date_string, date_format)
+
+        date_parsed_tz = date_parsed.replace(tzinfo=timezone("UTC")).astimezone(timezone("US/Eastern"))
+
+        return date_parsed_tz
+    except ValueError:
+        click.echo("WARN: Unable to parse message date")
+        return
+
