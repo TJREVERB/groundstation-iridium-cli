@@ -19,7 +19,8 @@ from google.auth.transport.requests import Request
 
 
 # If modifying these scopes, delete the file token.pickle.
-SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/gmail.modify']
+SCOPES = ['https://www.googleapis.com/auth/gmail.send',
+          'https://www.googleapis.com/auth/gmail.modify']
 SECRETS_FILENAME = "credentials.json"
 SECRETS_FILENAME_ENCRYPTED = "credentials.json.gpg"
 IMEI = None
@@ -88,7 +89,7 @@ def main():
     global IMEI, MAIL_RECEIVE_SUBJECT
     IMEI = get_imei()
     MAIL_RECEIVE_SUBJECT += str(IMEI)
-    click.secho("IMEI: " + str(IMEI) , fg="green")
+    click.secho("IMEI: " + str(IMEI), fg="green")
 
 
 @main.command()
@@ -215,13 +216,13 @@ def receive_msg_list(service, user_id, max_results, query=''):
         while 'nextPageToken' in response:
             page_token = response['nextPageToken']
             response = service.users().messages().list(userId=user_id, q=query,
-                                                 pageToken=page_token).execute()
+                                                       pageToken=page_token).execute()
             messages.extend(response['messages'])
 
         return messages[:max_results]
 
     except errors.HttpError as error:
-            click.echo('ERROR: %s' % error, err=True)
+        click.echo('ERROR: %s' % error, err=True)
 
 
 def receive_msg_body(service, user_id, msg_id):
@@ -248,7 +249,7 @@ def receive_msg_body(service, user_id, msg_id):
         return mime_msg
 
     except errors.HttpError as error:
-            click.echo('ERROR: %s' % error, err=True)
+        click.echo('ERROR: %s' % error, err=True)
 
 
 def receive_msg_attach(service, user_id, msg_id, store_dir="msg", save=False):
@@ -271,7 +272,7 @@ def receive_msg_attach(service, user_id, msg_id, store_dir="msg", save=False):
                 else:
                     attach_id = part['body']['attachmentId']
                     attach = service.users().messages().attachments().get(userId=user_id, messageId=msg_id,
-                                                                       id=attach_id).execute()
+                                                                          id=attach_id).execute()
                     attach_data = attach['data']
 
                 file_data = base64.urlsafe_b64decode(attach_data
@@ -289,7 +290,7 @@ def receive_msg_attach(service, user_id, msg_id, store_dir="msg", save=False):
                 return file_decoded_msg
 
     except errors.HttpError as error:
-            click.echo('ERROR: %s' % error, err=True)
+        click.echo('ERROR: %s' % error, err=True)
 
 
 def get_msg_send_date(msg_body) -> datetime.datetime:
@@ -304,10 +305,10 @@ def get_msg_send_date(msg_body) -> datetime.datetime:
     try:
         date_parsed = datetime.datetime.strptime(date_string, date_format)
 
-        date_parsed_tz = date_parsed.replace(tzinfo=timezone("UTC")).astimezone(timezone("US/Eastern"))
+        date_parsed_tz = date_parsed.replace(
+            tzinfo=timezone("UTC")).astimezone(timezone("US/Eastern"))
 
         return date_parsed_tz
     except ValueError:
         click.echo("WARN: Unable to parse message date")
         return
-
